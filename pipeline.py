@@ -15,29 +15,31 @@ import requests
 from urllib.parse import quote_plus, urljoin
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
+from collections import Counter
+from urllib.parse import urlparse
 
-import openai
 import pdfplumber
 import pytesseract
 from pdf2image import convert_from_path
 from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
+from groq import Groq
 
 # Load environment variables
 load_dotenv()
 
-##### OPENAI CLIENT WITH IMPROVED ERROR HANDLING #####
-class OpenAIClient:
+##### GROQ CLIENT WITH IMPROVED ERROR HANDLING #####
+class GroqClient:
     def __init__(self):
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
-            raise ValueError("❌ OpenAI API key not found. Please set OPENAI_API_KEY in your .env file")
+            raise ValueError("❌ Groq API key not found. Please set GROQ_API_KEY in your .env file")
         
-        self.client = openai.OpenAI(api_key=api_key)
+        self.client = Groq(api_key=api_key)
         self.model_fallbacks = [
-            "gpt-3.5-turbo",
-            "gpt-3.5-turbo-1106", 
-            "gpt-4o-mini",
+            "mixtral-8x7b-32768",  # Primary model
+            "llama3-8b-8192",      # New fallback option
+            "llama3-70b-8192"      # Larger model option
         ]
 
     def chat_completion(self, messages: List[Dict], model: str = None, max_tokens: int = None, retry_count: int = 3) -> str:
@@ -58,30 +60,15 @@ class OpenAIClient:
                     )
                     return response.choices[0].message.content.strip()
                 
-                except openai.RateLimitError as e:
-                    print(f"⏱️ Rate limit hit with {model_name}: {str(e)}")
+                except Exception as e:
+                    print(f"⏱️ Error with {model_name}: {str(e)}")
                     if attempt < retry_count - 1:
-                        wait_time = (attempt + 1) * 10
+                        wait_time = (attempt + 1) * 2
                         print(f"⏳ Waiting {wait_time} seconds before retry...")
                         time.sleep(wait_time)
                     continue
-                
-                except openai.AuthenticationError as e:
-                    return f"❌ Authentication Error: Please check your OpenAI API key. {str(e)}"
-                
-                except openai.InsufficientQuotaError as e:
-                    print(f"💳 Quota exceeded for {model_name}: {str(e)}")
-                    continue
-                
-                except openai.BadRequestError as e:
-                    print(f"❌ Bad request with {model_name}: {str(e)}")
-                    continue
-                
-                except Exception as e:
-                    print(f"❌ Unexpected error with {model_name}: {str(e)}")
-                    continue
         
-        return "❌ All AI models failed. Please check your OpenAI API key, quota, and internet connection."
+        return "❌ All AI models failed. Please check your Groq API key and internet connection."
 
 ##### ENHANCED PDF PROCESSOR WITH BETTER ERROR HANDLING #####
 class EnhancedPDFProcessor:
@@ -235,7 +222,7 @@ class EnhancedPDFProcessor:
 
 ##### ENHANCED STUDY AGENTS WITH FIXED PROMPTS #####
 class SummaryAgent:
-    def __init__(self, client: OpenAIClient):
+    def __init__(self, client: GroqClient):
         self.client = client
 
     def generate_summary(self, text: str) -> str:
@@ -288,7 +275,7 @@ Make the summary engaging, clear, and educational."""
             return f"❌ Summary generation failed: {str(e)}"
 
 class FlashcardAgent:
-    def __init__(self, client: OpenAIClient):
+    def __init__(self, client: GroqClient):
         self.client = client
 
     def generate_flashcards_structured(self, text: str, num_cards=10) -> List[Dict]:
@@ -400,7 +387,7 @@ Guidelines:
         return flashcards[:num_cards]
 
 class QuizAgent:
-    def __init__(self, client: OpenAIClient):
+    def __init__(self, client: GroqClient):
         self.client = client
 
     def generate_quiz_structured(self, text: str, num_questions=8) -> List[Dict]:
@@ -524,17 +511,6 @@ Guidelines:
         return quiz_questions[:num_questions]
 
 ##### REAL WEB DISCOVERY AGENTS #####
-#!/usr/bin/env python3
-import os
-import re
-import json
-import requests
-import xml.etree.ElementTree as ET
-from urllib.parse import quote_plus
-from typing import Dict, List, Tuple
-import time
-from collections import Counter
-
 class EnhancedResearchDiscoveryAgent:
     def __init__(self, client):
         self.client = client
@@ -1042,7 +1018,7 @@ Avoid generic terms like "study", "research", "analysis" unless they're part of 
             
             return base_score + recency_boost + citation_boost
         
-        # Sort by ranking score (descending)
+        # Sort by rank score (descending)
         unique_papers.sort(key=ranking_score, reverse=True)
         
         # Add readable relevance labels
@@ -1059,43 +1035,6 @@ Avoid generic terms like "study", "research", "analysis" unless they're part of 
         
         print(f"✅ Deduplicated to {len(unique_papers)} unique papers, ranked by relevance")
         return unique_papers
-
-# Integration function for the main application
-def enhance_research_discovery_in_orchestrator(orchestrator_class):
-    """Function to replace the research agent in your StudyAssistantOrchestrator"""
-    
-    def enhanced_discover_research_papers(self):
-        """Enhanced research paper discovery method"""
-        if not self.last_processed_text:
-            return []
-        
-        try:
-            print("🔍 Enhanced research paper discovery...")
-            enhanced_agent = EnhancedResearchDiscoveryAgent(self.client)
-            papers = enhanced_agent.find_papers(
-                text=self.last_processed_text,
-                max_papers=10
-            )
-            print(f"✅ Found {len(papers)} relevant research papers")
-            return papers
-        except Exception as e:
-            print(f"❌ Error in enhanced research discovery: {e}")
-            return []
-    
-    # Replace the method
-    orchestrator_class._discover_research_papers = enhanced_discover_research_papers
-    
-    return orchestrator_class
-#!/usr/bin/env python3
-import os
-import re
-import json
-import requests
-import time
-from urllib.parse import quote_plus, urlparse
-from bs4 import BeautifulSoup
-from typing import Dict, List
-import random
 
 class YouTubeDiscoveryAgent:
     def __init__(self, client):
@@ -1397,17 +1336,6 @@ class YouTubeDiscoveryAgent:
         
         print(f"✅ Ranked {len(unique_videos)} unique educational videos")
         return unique_videos
-
-#!/usr/bin/env python3
-import os
-import re
-import json
-import requests
-import time
-from urllib.parse import quote_plus, urljoin, urlparse
-from bs4 import BeautifulSoup
-from typing import Dict, List
-import random
 
 class WebResourceAgent:
     def __init__(self, client):
@@ -1955,20 +1883,20 @@ def test_ocr_setup():
         print(f"❌ OCR setup failed: {e}")
         print("💡 Try installing Tesseract: https://github.com/tesseract-ocr/tesseract")
 
-def test_openai_connection():
-    """Test OpenAI API connection"""
-    print("\n🔍 Testing OpenAI Connection...")
+def test_groq_connection():
+    """Test Groq API connection"""
+    print("\n🔍 Testing Groq Connection...")
     
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        print("❌ No OpenAI API key found in environment variables")
-        print("💡 Set OPENAI_API_KEY in your .env file")
+        print("❌ No Groq API key found in environment variables")
+        print("💡 Set GROQ_API_KEY in your .env file")
         return
     
     print(f"✅ API key found: {api_key[:8]}...{api_key[-4:]}")
     
     try:
-        client = OpenAIClient()
+        client = GroqClient()
         test_message = [{"role": "user", "content": "Say 'Hello World' to test the connection."}]
         
         response = client.chat_completion(test_message, max_tokens=50)
@@ -1987,7 +1915,7 @@ def run_study_assistant(pdf_path):
     
     try:
         # Initialize components
-        client = OpenAIClient()
+        client = GroqClient()
         processor = EnhancedPDFProcessor()
         summary_agent = SummaryAgent(client)
         flashcard_agent = FlashcardAgent(client)
@@ -2055,7 +1983,7 @@ if __name__ == "__main__":
     print("1. Run Study Assistant")
     print("2. Diagnose PDF")
     print("3. Test OCR Setup")
-    print("4. Test OpenAI Connection")
+    print("4. Test Groq Connection")
     print("5. Exit")
     
     choice = input("\nChoose an option (1-5): ").strip()
@@ -2075,7 +2003,7 @@ if __name__ == "__main__":
         test_ocr_setup()
     
     elif choice == "4":
-        test_openai_connection()
+        test_groq_connection()
     
     elif choice == "5":
         print("👋 Goodbye!")
