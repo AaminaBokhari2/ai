@@ -1,15 +1,18 @@
+// src/services/api.ts
 import axios from 'axios';
-import type { 
-  ProcessingStatus, 
-  StudySession, 
-  Flashcard, 
-  QuizQuestion, 
-  ResearchPaper, 
-  YouTubeVideo, 
-  WebResource 
+import type {
+  ProcessingStatus,
+  StudySession,
+  Flashcard,
+  QuizQuestion,
+  ResearchPaper,
+  YouTubeVideo,
+  WebResource
 } from '../types';
 
-const API_BASE = 'http://localhost:8000';
+// Prefer an explicit env var (Vite) when available, otherwise use '/api' so you can set up a Vite proxy.
+// Example .env: VITE_API_BASE=https://<your-forwarded>-8000.app.github.dev
+const API_BASE = (import.meta?.env?.VITE_API_BASE as string) || '/api';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -42,7 +45,7 @@ export const apiService = {
   async uploadPDF(file: File): Promise<ProcessingStatus> {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     const response = await api.post('/upload-pdf', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
